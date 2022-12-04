@@ -3,6 +3,12 @@ defmodule Analyzer do
   """
 
   @opts_normalize [
+    as: [
+      type: :string,
+      required: false,
+      default: "record",
+      doc: "TODO"
+    ],
     metadata_prefix: [
       type: :string,
       required: false,
@@ -28,6 +34,7 @@ defmodule Analyzer do
     * Inject `normalized_at` metadata key.
     * Rename columns to snake_case - for better compatibily with 3rd-party tools.
     * Convert keys to string - generate string keys for safety purposes.
+    * Expand nested values into its own records
 
   The metadata keys `id` and `normalized_at` are injected with a prefix that
   can be customized by passing `:metadata_prefix` to `opts`.
@@ -82,20 +89,75 @@ defmodule Analyzer do
   end
 
   def normalize(input, opts) when is_map(input) do
-    metadata_prefix_default = Kernel.get_in(@opts_normalize, [:metadata_prefix, :default])
-    {metadata_prefix, _opts} = Keyword.pop(opts, :metadata_prefix, metadata_prefix_default)
+    default_as = Kernel.get_in(@opts_normalize, [:as, :default])
+    {as, opts} = Keyword.pop(opts, :as, default_as)
 
-    input =
-      Map.new(input, fn {key, value} ->
-        {key, value}
-      end)
+    default_metadata_prefix = Kernel.get_in(@opts_normalize, [:metadata_prefix, :default])
+    {metadata_prefix, _opts} = Keyword.pop(opts, :metadata_prefix, default_metadata_prefix)
 
+    Enum.reduce(input, %{as => %{}}, fn {key, value}, acc ->
+      key = normalize_key(key)
+      value = normalize_record(value, metadata_prefix)
+
+      case value do
+        {:drop_key, new_record} ->
+          Map.put(acc, key, new_record)
+
+        value ->
+          Map.update(acc, as, %{}, fn current ->
+            current
+            |> Map.put(key, value)
+            |> inject_metadata(metadata_prefix)
+          end)
+      end
+    end)
+  end
+
+  defp normalize_key(key) do
+    key
+    |> Kernel.to_string()
+    |> to_snake_case()
+  end
+
+  # TODO expand multiple nested levels
+  defp normalize_record(value, metadata_prefix) when is_list(value) do
+    list_of_maps? = fn value -> Enum.all?(value, &is_map/1) end
+
+    if list_of_maps?.(value) do
+      new_record =
+        Enum.map(value, fn record ->
+          record
+          |> Map.new(fn {key, value} ->
+            key = normalize_key(key)
+            value = normalize_record(value, metadata_prefix)
+
+            {key, value}
+          end)
+          |> inject_metadata(metadata_prefix)
+        end)
+
+      {:drop_key, new_record}
+    else
+      new_record =
+        Enum.map(value, fn value ->
+          inject_metadata(%{"data" => value}, metadata_prefix)
+        end)
+
+      {:drop_key, new_record}
+    end
+  end
+
+  defp normalize_record(value, _opts) do
+    value
+  end
+
+  defp inject_metadata(input, metadata_prefix) do
     metadata = %{
       (metadata_prefix <> "id") => hash_id(input),
       (metadata_prefix <> "normalized_at") => DateTime.utc_now()
     }
 
-    [Map.merge(input, metadata)]
+    Map.merge(input, metadata)
   end
 
   @doc false
@@ -108,5 +170,10 @@ defmodule Analyzer do
     >>
 
     Base.url_encode64(binary)
+  end
+
+  defp to_snake_case(key) when is_binary(key) do
+    # TODO implement a proper algo transforming snake case
+    Macro.underscore(key)
   end
 end
