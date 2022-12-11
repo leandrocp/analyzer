@@ -4,6 +4,8 @@ Data Quality for Elixir. Ensuring your data meets expectations, it's  like unit-
 
 Common use cases include, but not limited to:
 
+  - Validating production data at rest.
+  - Enforcing data schema and content on CI/CD.
   - Establishing a contract for consumed APIs.
   - Validating the structure and content of CSV files.
   - Ensuring data quality in a ETL or ELT pipeline.
@@ -12,7 +14,7 @@ Common use cases include, but not limited to:
 
 ## Features
 
-* [Profiling](#profiling) - evaluate a set of data returning a summary of its structure and content to help you understand the shape of the data and identify potential expectations and failures.
+* [Profiling](#profiling) - evaluate a set of data to generate summary and suggested expectations to help you undertand the schema and content, and potentially identify failures and gaps.
 
 * [Testing](#testing) - apply a set of expectations to test your data is conforming to a contract.
 
@@ -46,7 +48,41 @@ customers = [
 Very often that data is either unknown or too big to grasp in a first look, the first step is to profile it to extract valuable statistics:
 
 ```elixir
-Analyzer.profile(customer)
+# WIP
+profile = Analyzer.profile(customer)
+#=>
+# %Analyzer.Profile{
+#   table: %{
+#     n_columns: 4,
+#     n_rows: 4
+#   },
+#   columns: %{
+#     "id" => %{
+#       datatype: :integer,
+#       sample_values: [1, 2],
+#       n_distinct: 4,
+#       min: 1,
+#       max: 4,
+#     },
+#     "name" => %{
+#       datatype: :string,
+#       n_distinct: 4,
+#       sample_values: ["José", "Julius"]
+#     },
+#     "email" => %{
+#       datatype: :string,
+#       n_distinct: 4,
+#       sample_values: ["jose@gmail.com", "julius@"]
+#     },
+#     "email_mkt" => %{
+#       datatype: :boolean,
+#       n_distinct: 2,
+#       sample_values: [true, false]
+#     }
+#   } 
+# }
+
+Analyzer.suggested_expectations(profile)
 #=> TODO
 ```
 
@@ -146,7 +182,7 @@ Given a `%Analyzer.Result{}` struct, it can be used to generate a report:
 |> Analyzer.report()
 ```
 
-TODO
+TODO generate static html or liveview
 
 ### Anomaly Detection
 
@@ -163,7 +199,7 @@ TODO
 Last but not least, normalization is the process of flattening and linking related data, in other words transforming a complex data structure into a tabular format:
 
 ```elixir
-Analyzer.normalize(
+Analyzer.normalize([
   %{
     first_name: "José",
     projects: [%{name: "elixir"}, %{name: "livebook"}]
@@ -173,7 +209,7 @@ Analyzer.normalize(
     projects: []
   },
   as: "users"
-)
+])
 #=>
 # %{
 #   "users" => [
@@ -205,7 +241,7 @@ Analyzer.normalize(
 # }
 ```
 
-Check out `Analyzer.normalize/2` for more options to customize it.
+Check out `Analyzer.normalize/2` for more options.
 
 With that data transformed into a tabular format, you can ingest it into a data frame:
 
@@ -223,4 +259,4 @@ Explorer.DataFrame.new(result["users"])
 
 ## Acknowledgments
 
-Analyzer is inspired by [changeset](https://hexdocs.pm/ecto/Ecto.Changeset.html), [explorer](https://github.com/elixir-nx/explorer), [great_expectations](https://github.com/great-expectations/great_expectations), and [deequ](https://github.com/awslabs/deequ).
+Analyzer is inspired by [changeset](https://hexdocs.pm/ecto/Ecto.Changeset.html), [explorer](https://github.com/elixir-nx/explorer), [great_expectations](https://github.com/great-expectations/great_expectations), [deequ](https://github.com/awslabs/deequ), and [dbt](https://www.getdbt.com/product/data-testing/).
